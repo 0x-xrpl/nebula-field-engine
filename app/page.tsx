@@ -196,6 +196,28 @@ const useParallaxScroll = () => {
   return scrollY;
 };
 
+const FloatingClusters: React.FC<{ active: boolean; scrollY: number }> = ({ active, scrollY }) => (
+  <motion.div
+    className="absolute inset-0 blur-[120px]"
+    style={{ y: scrollY * 0.08 }}
+    animate={{ rotate: 360, x: ['-4%', '4%'], scale: active ? 1.3 : 1.1 }}
+    transition={{ repeat: Infinity, duration: active ? 32 : 60, ease: 'linear' }}
+  >
+    <motion.div
+      className="absolute w-64 h-64 rounded-full"
+      style={{ background: THEME.colors.primary, top: '30%', left: '38%' }}
+      animate={{ x: ['-12%', '12%'], y: ['-14%', '10%'] }}
+      transition={{ repeat: Infinity, duration: 26, ease: 'easeInOut', repeatType: 'reverse' }}
+    />
+    <motion.div
+      className="absolute w-96 h-96 rounded-full"
+      style={{ background: THEME.colors.accent, top: '45%', left: '60%' }}
+      animate={{ x: ['12%', '-12%'], y: ['18%', '-10%'] }}
+      transition={{ repeat: Infinity, duration: 34, ease: 'easeInOut', repeatType: 'reverse' }}
+    />
+  </motion.div>
+);
+
 const AbstractNoiseField: React.FC<{ active: boolean }> = ({ active }) => {
   const scrollY = useParallaxScroll();
   const controls = useAnimation();
@@ -225,39 +247,20 @@ const AbstractNoiseField: React.FC<{ active: boolean }> = ({ active }) => {
         }}
       />
 
+      <FloatingClusters active={active} scrollY={scrollY} />
       <motion.div
-        className="absolute inset-0"
+        className="absolute rounded-full"
         style={{
-          y: scrollY * 0.08,
-          filter: 'blur(110px)',
+          width: '85vmin',
+          height: '85vmin',
+          right: '-12vmin',
+          top: '15vh',
+          background: 'radial-gradient(circle, rgba(245,158,11,0.55) 0%, rgba(245,158,11,0.25) 35%, transparent 70%)',
+          opacity: active ? 0.55 : 0.38,
         }}
-        animate={{
-          rotate: 360,
-          x: ['-3%', '3%'],
-          scale: active ? 1.25 : 1.05,
-        }}
-        transition={{ repeat: Infinity, duration: active ? 40 : 70, ease: 'linear' }}
-      >
-        <motion.div
-          className="absolute w-72 h-72 rounded-full top-10 left-[-5%]"
-          style={{ background: THEME.colors.primary }}
-          animate={{ x: ['-5%', '10%'], y: ['-5%', '15%'] }}
-          transition={{ repeat: Infinity, duration: 28, ease: 'easeInOut', repeatType: 'reverse' }}
-        />
-        <motion.div
-          className="absolute rounded-full"
-          style={{
-            width: '85vmin',
-            height: '85vmin',
-            right: '-12vmin',
-            top: '15vh',
-            background: 'radial-gradient(circle, rgba(245,158,11,0.55) 0%, rgba(245,158,11,0.25) 35%, transparent 70%)',
-            opacity: active ? 0.55 : 0.38,
-          }}
-          animate={{ rotate: [0, 360], scale: active ? [1.05, 1.15, 1.05] : [1, 1.05, 1], y: ['-5%', '5%'] }}
-          transition={{ repeat: Infinity, duration: 55, ease: 'linear' }}
-        />
-      </motion.div>
+        animate={{ rotate: [0, 360], scale: active ? [1.05, 1.15, 1.05] : [1, 1.05, 1], y: ['-5%', '5%'] }}
+        transition={{ repeat: Infinity, duration: 55, ease: 'linear' }}
+      />
 
       <motion.div
         className="absolute pointer-events-none"
