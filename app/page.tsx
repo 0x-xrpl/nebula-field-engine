@@ -1110,6 +1110,17 @@ export default function App() {
   }, [connectedAddress]);
 
   useEffect(() => {
+    if (!connectedAddress) {
+      setWalletWarning('');
+      setInputIntent('');
+      setEmitError('');
+      setWaveScore(null);
+      setIntentResult(null);
+      setIntentActive(false);
+    }
+  }, [connectedAddress]);
+
+  useEffect(() => {
     const target = walletAddress.trim();
     if (!target || !target.startsWith('0x') || target.length < 6) {
       setFeedSource('');

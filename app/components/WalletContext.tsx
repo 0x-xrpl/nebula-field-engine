@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -21,13 +22,21 @@ interface WalletContextValue {
   connectWithMetaMask: () => Promise<void>;
   connectWithSomniaWallet: () => Promise<void>;
   connectWithWalletConnect: () => Promise<void>;
-  disconnect: () => void;
+  disconnect: () => Promise<void>;
   error: string | null;
   clearError: () => void;
 }
 
 const NO_WALLET_ERROR = 'No compatible wallet found. Please install MetaMask or another supported wallet.';
-const STORAGE_KEY = 'nebulla-field-connected-wallet';
+const AUTO_CONNECT_KEY = 'NF_AUTO_CONNECT';
+const WALLETCONNECT_CACHE_KEYS = [
+  'walletconnect',
+  'wc@2:client',
+  'wc@2:session',
+  'walletconnect#',
+  'wagmi.wallet',
+  'wagmi.store',
+];
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
@@ -55,65 +64,70 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const [selectedWallet, setSelectedWallet] = useState<SupportedWallet | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const walletConnectClientRef = useRef<any>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
-  useEffect(() => {
+  const clearWalletConnectCache = useCallback(() => {
     if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      setAddress(stored);
-      setSelectedWallet('metamask');
+    WALLETCONNECT_CACHE_KEYS.forEach((key) => {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        // ignore storage errors
+      }
+      try {
+        window.sessionStorage?.removeItem(key);
+      } catch {
+        // ignore storage errors
+      }
+    });
+  }, []);
+
+  const resetWalletState = useCallback(() => {
+    setAddress(null);
+    setSelectedWallet(null);
+    clearError();
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(AUTO_CONNECT_KEY);
     }
-  }, []);
-
-  useEffect(() => {
-    const provider = getMetaMaskProvider();
-    if (!provider) return;
-
-    provider
-      .request?.({ method: 'eth_accounts' })
-      .then((accounts: string[]) => {
-        if (accounts?.length) {
-          setAddress(accounts[0]);
-          setSelectedWallet('metamask');
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem(STORAGE_KEY, accounts[0]);
-          }
-        } else if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(STORAGE_KEY);
-        }
-      })
-      .catch(() => {
-        // Ignore initial errors; user may not have granted access yet.
-      });
-  }, []);
+  }, [clearError]);
 
   useEffect(() => {
     const provider = getMetaMaskProvider();
     if (!provider?.on) return;
 
     const handleAccountsChanged = (accounts: string[]) => {
+      if (selectedWallet !== 'metamask') return;
       if (accounts?.length) {
         setAddress(accounts[0]);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(STORAGE_KEY, accounts[0]);
-        }
       } else {
-        setAddress(null);
-        setSelectedWallet(null);
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(STORAGE_KEY);
-        }
+        resetWalletState();
+      }
+    };
+
+    const handleChainChanged = () => {
+      if (selectedWallet === 'metamask') {
+        resetWalletState();
+      }
+    };
+
+    const handleDisconnect = () => {
+      if (selectedWallet === 'metamask') {
+        resetWalletState();
       }
     };
 
     provider.on('accountsChanged', handleAccountsChanged);
+    provider.on('chainChanged', handleChainChanged);
+    provider.on('disconnect', handleDisconnect);
 
     return () => {
       provider.removeListener?.('accountsChanged', handleAccountsChanged);
+      provider.removeListener?.('chainChanged', handleChainChanged);
+      provider.removeListener?.('disconnect', handleDisconnect);
     };
-  }, []);
+  }, [resetWalletState, selectedWallet]);
 
   const openWalletModal = useCallback(() => {
     clearError();
@@ -127,7 +141,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 
   const connectWithMetaMask = useCallback(async () => {
     clearError();
-    setSelectedWallet('metamask');
 
     const provider = getMetaMaskProvider();
 
@@ -136,8 +149,9 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         const accounts: string[] = await provider.request({ method: 'eth_requestAccounts' });
         if (accounts?.length) {
           setAddress(accounts[0]);
+          setSelectedWallet('metamask');
           if (typeof window !== 'undefined') {
-            window.localStorage.setItem(STORAGE_KEY, accounts[0]);
+            window.localStorage.setItem(AUTO_CONNECT_KEY, 'true');
           }
           setIsModalOpen(false);
           return;
@@ -164,7 +178,6 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 
   const connectWithSomniaWallet = useCallback(async () => {
     clearError();
-    setSelectedWallet('somnia');
 
     if (isMobileDevice() && typeof window !== 'undefined') {
       const redirect = encodeURIComponent(window.location.href);
@@ -177,22 +190,47 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
 
   const connectWithWalletConnect = useCallback(async () => {
     clearError();
-    setSelectedWallet('walletconnect');
+    clearWalletConnectCache();
 
     if (typeof window !== 'undefined') {
       window.open('https://walletconnect.com/', '_blank', 'noopener');
     }
 
     setError('WalletConnect integration is coming soon.');
-  }, [clearError]);
+  }, [clearError, clearWalletConnectCache]);
 
-  const disconnect = useCallback(() => {
-    setAddress(null);
-    setSelectedWallet(null);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(STORAGE_KEY);
+  const disconnect = useCallback(async () => {
+    try {
+      if (selectedWallet === 'metamask') {
+        const provider = getMetaMaskProvider();
+        if (provider?.isMetaMask && provider?.request) {
+          try {
+            await provider.request({
+              method: 'wallet_revokePermissions',
+              params: [{ eth_accounts: {} }],
+            });
+          } catch (err) {
+            console.warn('wallet_revokePermissions failed', err);
+          }
+        }
+      }
+
+      if (selectedWallet === 'walletconnect') {
+        try {
+          await walletConnectClientRef.current?.disconnect?.();
+        } catch (err) {
+          console.warn('Failed to disconnect WalletConnect session', err);
+        }
+        clearWalletConnectCache();
+      }
+
+      if (selectedWallet === 'somnia') {
+        clearWalletConnectCache();
+      }
+    } finally {
+      resetWalletState();
     }
-  }, []);
+  }, [selectedWallet, clearWalletConnectCache, resetWalletState]);
 
   const value = useMemo<WalletContextValue>(
     () => ({

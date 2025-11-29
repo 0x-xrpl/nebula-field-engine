@@ -17,7 +17,7 @@ interface ConnectWalletModalProps {
   clearError?: () => void;
   isConnected?: boolean;
   connectedAddress?: string | null;
-  onDisconnect?: () => void;
+  onDisconnect?: () => Promise<void> | void;
 }
 
 const ConnectWalletModalContent: React.FC<ConnectWalletModalProps> = ({
@@ -81,8 +81,10 @@ const ConnectWalletModalContent: React.FC<ConnectWalletModalProps> = ({
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    onDisconnect?.();
+                  onClick={async () => {
+                    if (onDisconnect) {
+                      await onDisconnect();
+                    }
                     handleClose();
                   }}
                   className="w-full rounded-xl border border-emerald-400/40 bg-emerald-400/10 py-2 text-xs font-data tracking-[0.35em] text-emerald-200 hover:border-red-400/60 hover:text-red-200 transition-colors"
