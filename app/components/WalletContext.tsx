@@ -27,6 +27,7 @@ interface WalletContextValue {
 }
 
 const NO_WALLET_ERROR = 'No compatible wallet found. Please install MetaMask or another supported wallet.';
+const STORAGE_KEY = 'nebulla-field-connected-wallet';
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
 
@@ -58,6 +59,15 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const clearError = useCallback(() => setError(null), []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      setAddress(stored);
+      setSelectedWallet('metamask');
+    }
+  }, []);
+
+  useEffect(() => {
     const provider = getMetaMaskProvider();
     if (!provider) return;
 
@@ -67,6 +77,11 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         if (accounts?.length) {
           setAddress(accounts[0]);
           setSelectedWallet('metamask');
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(STORAGE_KEY, accounts[0]);
+          }
+        } else if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(STORAGE_KEY);
         }
       })
       .catch(() => {
@@ -81,9 +96,15 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
     const handleAccountsChanged = (accounts: string[]) => {
       if (accounts?.length) {
         setAddress(accounts[0]);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(STORAGE_KEY, accounts[0]);
+        }
       } else {
         setAddress(null);
         setSelectedWallet(null);
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(STORAGE_KEY);
+        }
       }
     };
 
@@ -115,6 +136,9 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
         const accounts: string[] = await provider.request({ method: 'eth_requestAccounts' });
         if (accounts?.length) {
           setAddress(accounts[0]);
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(STORAGE_KEY, accounts[0]);
+          }
           setIsModalOpen(false);
           return;
         }
@@ -165,6 +189,9 @@ export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   const disconnect = useCallback(() => {
     setAddress(null);
     setSelectedWallet(null);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
   }, []);
 
   const value = useMemo<WalletContextValue>(

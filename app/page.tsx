@@ -1105,7 +1105,7 @@ export default function App() {
 
   const handleReset = () => {
     setInputIntent('');
-    setWalletAddress('');
+    setWalletAddress(connectedAddress ?? '');
     setEmitError('');
     setWaveScore(null);
     setIntentResult(null);
